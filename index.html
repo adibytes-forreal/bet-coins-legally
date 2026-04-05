@@ -1,0 +1,141 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>2Thirds Live Bets</title>
+
+  <!-- Firebase -->
+  <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore-compat.js"></script>
+
+  <style>
+    body { font-family: Arial; text-align: center; background: #0f172a; color: white; }
+    input, button { padding: 10px; margin: 5px; border-radius: 8px; border: none; }
+    button { background: #38bdf8; cursor: pointer; font-weight: bold; }
+    button:disabled { background: #888; cursor: not-allowed; }
+    .bet, .leader { background: #334155; margin: 5px; padding: 10px; border-radius: 8px; }
+  </style>
+</head>
+<body>
+
+<h1>🔥 2Thirds Live Bets 🔥</h1>
+
+<input id="nickname" placeholder="Enter Nickname">
+<p>💰 Balance: <span id="balance">50</span> coins</p>
+<input id="coins" type="number" placeholder="Coins to Bet" min="1">
+<button id="placeBetBtn">Place Bet</button>
+
+<h2>📊 Live Bets</h2>
+<div id="bets"></div>
+
+<h2>🏆 Leaderboard</h2>
+<div id="leaderboard"></div>
+
+<script>
+  // 🔴 Put your real Firebase config here
+  const firebaseConfig = {
+    apiKey: "YOUR_REAL_KEY",
+    authDomain: "YOUR_REAL_DOMAIN",
+    projectId: "YOUR_REAL_ID"
+  };
+
+  firebase.initializeApp(firebaseConfig);
+  const db = firebase.firestore();
+
+  const nicknameInput = document.getElementById("nickname");
+  const coinsInput = document.getElementById("coins");
+  const placeBetBtn = document.getElementById("placeBetBtn");
+  const balanceSpan = document.getElementById("balance");
+  const betsDiv = document.getElementById("bets");
+  const leaderboardDiv = document.getElementById("leaderboard");
+
+  let userBalance = 50;
+  let nickname = "";
+
+  // Initialize user on nickname change
+  nicknameInput.addEventListener("change", async () => {
+    nickname = nicknameInput.value.trim();
+    if (!nickname) return;
+
+    const userRef = db.collection("users").doc(nickname);
+    const doc = await userRef.get();
+
+    if (!doc.exists) {
+      await userRef.set({ balance: 50, name: nickname });
+      userBalance = 50;
+    } else {
+      userBalance = doc.data().balance;
+    }
+    balanceSpan.innerText = userBalance;
+    checkBalance();
+  });
+
+  // Check balance to enable/disable button
+  function checkBalance() {
+    placeBetBtn.disabled = userBalance <= 0;
+  }
+
+  // Place Bet
+  placeBetBtn.onclick = async () => {
+    nickname = nicknameInput.value.trim();
+    const coins = parseInt(coinsInput.value);
+
+    if (!nickname) { alert("Enter a nickname!"); return; }
+    if (!coins || coins <= 0) { alert("Enter valid coins!"); return; }
+    if (coins > userBalance) { alert("Not enough coins!"); return; }
+
+    try {
+      // Subtract coins from user balance
+      userBalance -= coins;
+      balanceSpan.innerText = userBalance;
+      checkBalance();
+
+      // Update user balance in Firestore
+      const userRef = db.collection("users").doc(nickname);
+      await userRef.set({ name: nickname, balance: userBalance });
+
+      // Add bet
+      await db.collection("bets").add({
+        name: nickname,
+        coins: coins,
+        timestamp: firebase.firestore.FieldValue.serverTimestamp()
+      });
+
+      coinsInput.value = "";
+    } catch (err) {
+      alert("Error placing bet: " + err);
+      console.error(err);
+    }
+  };
+
+  // Listen for live bets
+  db.collection("bets").orderBy("timestamp", "asc").onSnapshot(snapshot => {
+    betsDiv.innerHTML = "";
+    snapshot.forEach(doc => {
+      const bet = doc.data();
+      const div = document.createElement("div");
+      div.className = "bet";
+      div.innerHTML = `<strong>${bet.name}</strong> bet <strong>${bet.coins} coins</strong>`;
+      betsDiv.appendChild(div);
+    });
+  });
+
+  // Listen for leaderboard updates
+  db.collection("users").onSnapshot(snapshot => {
+    leaderboardDiv.innerHTML = "";
+    let users = [];
+    snapshot.forEach(doc => {
+      users.push(doc.data());
+    });
+
+    users.sort((a,b) => b.balance - a.balance);
+    users.forEach(u => {
+      const div = document.createElement("div");
+      div.className = "leader";
+      div.innerHTML = `🏅 ${u.name}: ${u.balance} coins`;
+      leaderboardDiv.appendChild(div);
+    });
+  });
+</script>
+
+</body>
+</html>
